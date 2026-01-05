@@ -50,14 +50,16 @@ final GoRouter router = GoRouter(
       return '/login';
     }
 
-    // 🚫 Logged in → no auth pages
+    // 🚫 Logged in → no auth pages, EXCEPT allow /login if coming from onboarding
     if (loggedIn && authRoutes.contains(location)) {
-      return '/home';
+      if (location == '/login' && state.uri.queryParameters['from'] == 'onboarding') {
+        return null;
+      }
+      return '/onboarding';
     }
-
-    // ✅ PREVENT ONBOARDING LOOP
+    // 🚫 Never redirect away from onboarding if on onboarding
     if (loggedIn && location == '/onboarding') {
-      return '/home';
+      return null;
     }
 
     return null;

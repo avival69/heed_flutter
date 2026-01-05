@@ -89,11 +89,20 @@ class _PostDetailPageState extends State<PostDetailPage> {
                       setState(() => _currentImageIndex = index);
                     },
                     itemBuilder: (_, i) {
-                      return CachedNetworkImage(
-                        imageUrl: images[i]['original'],
+                      return Image.network(
+                        images[i]['original'],
                         fit: BoxFit.cover,
-                        placeholder: (context, url) => const Center(child: CircularProgressIndicator()),
-                        errorWidget: (context, url, error) => const Icon(Icons.error),
+                        loadingBuilder: (context, child, loadingProgress) {
+                          if (loadingProgress == null) return child;
+                          return Center(
+                            child: CircularProgressIndicator(
+                              value: loadingProgress.expectedTotalBytes != null
+                                  ? loadingProgress.cumulativeBytesLoaded / loadingProgress.expectedTotalBytes!
+                                  : null,
+                            ),
+                          );
+                        },
+                        errorBuilder: (context, error, stackTrace) => const Icon(Icons.error),
                       );
                     },
                   ),
@@ -423,8 +432,19 @@ class _PostDetailPageState extends State<PostDetailPage> {
                     child: Image.network(
                       img['preview'],
                       fit: BoxFit.cover,
-                      placeholder: (context, url) => const Center(child: CircularProgressIndicator()),
-                      errorWidget: (context, url, error) => const Icon(Icons.error),
+                    cacheWidth: 400,
+                    cacheHeight: 600,
+                    loadingBuilder: (context, child, loadingProgress) {
+                      if (loadingProgress == null) return child;
+                      return Center(
+                        child: CircularProgressIndicator(
+                          value: loadingProgress.expectedTotalBytes != null
+                              ? loadingProgress.cumulativeBytesLoaded / loadingProgress.expectedTotalBytes!
+                              : null,
+                        ),
+                      );
+                    },
+                    errorBuilder: (context, error, stackTrace) => const Icon(Icons.error),
                     ),
                   ),
                 ),
