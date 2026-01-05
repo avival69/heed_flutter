@@ -1,7 +1,7 @@
-import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
-import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/material.dart';// for ScrollController, Scaffold 
+import 'package:flutter/rendering.dart';// for ScrollDirection
+import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';// for SliverMasonryGrid(masonry (Pinterest-like) grid)
+import 'package:cloud_firestore/cloud_firestore.dart'; // for Firestore database
 
 import '../layout/main_shell.dart';
 import 'post_detail.dart';
@@ -16,18 +16,71 @@ class Home extends StatefulWidget {
 class _HomeState extends State<Home> {
   final ScrollController _controller = ScrollController();
 
+  final List<QueryDocumentSnapshot> _posts = [];
+  bool _loading = false;
+  bool _hasMore = true;
+
+  static const int _limit = 10;
+  DocumentSnapshot? _lastDoc;
+
   @override
   void initState() {
     super.initState();
 
+    _loadPosts();
+
     _controller.addListener(() {
+      /// navbar hide / show
       final dir = _controller.position.userScrollDirection;
       if (dir == ScrollDirection.reverse) {
         navController.hide();
       } else if (dir == ScrollDirection.forward) {
         navController.show();
       }
+
+      /// load more trigger
+      if (_controller.position.pixels >=
+              _controller.position.maxScrollExtent - 300 &&
+          !_loading &&
+          _hasMore) {
+        _loadPosts();
+      }
     });
+  }
+
+  Future<void> _loadPosts({bool refresh = false}) async {
+    if (_loading) return;
+    _loading = true;
+    setState(() {});
+
+    try {
+      Query query = FirebaseFirestore.instance
+          .collection('posts')
+          .orderBy('createdAt', descending: true)
+          .limit(_limit);
+
+      if (!refresh && _lastDoc != null) {
+        query = query.startAfterDocument(_lastDoc!);
+      }
+
+      final snap = await query.get();
+
+      if (refresh) {
+        _posts.clear();
+        _lastDoc = null;
+        _hasMore = true;
+      }
+
+      if (snap.docs.isNotEmpty) {
+        _lastDoc = snap.docs.last;
+        _posts.addAll(snap.docs);
+      } else {
+        _hasMore = false;
+      }
+    } finally {
+      _loading = false;
+      setState(() {});
+    }
   }
 
   @override
@@ -35,7 +88,6 @@ class _HomeState extends State<Home> {
     return Scaffold(
       backgroundColor: const Color(0xFFF8F8F8),
 
-      // ---------------- APP BAR ----------------
       appBar: AppBar(
         centerTitle: true,
         elevation: 0,
@@ -52,90 +104,73 @@ class _HomeState extends State<Home> {
         ),
       ),
 
-      // ---------------- FEED ----------------
-      body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance
-            .collection('posts')
-            .orderBy('createdAt', descending: true)
-            .snapshots(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return _skeletonFeed();
-          }
+      body: RefreshIndicator(
+        onRefresh: () async => _loadPosts(refresh: true),
+        child: CustomScrollView(
+          controller: _controller,
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
+            SliverPadding(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              sliver: SliverMasonryGrid.count(
+                crossAxisCount: 2,
+                mainAxisSpacing: 14,
+                crossAxisSpacing: 14,
+                childCount: _posts.length,
+                itemBuilder: (context, i) {
+                  final data = _posts[i].data() as Map<String, dynamic>;
 
-          final docs = snapshot.data?.docs ?? [];
+                  final images =
+                      List<Map<String, dynamic>>.from(data['images'] ?? []);
 
-          if (docs.isEmpty) {
-            return const Center(child: Text("No posts yet"));
-          }
+                  if (images.isEmpty) return const SizedBox.shrink();
 
-          return CustomScrollView(
-            controller: _controller,
-            slivers: [
-              SliverPadding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                sliver: SliverMasonryGrid.count(
-                  crossAxisCount: 2,
-                  mainAxisSpacing: 14,
-                  crossAxisSpacing: 14,
-                  childCount: docs.length,
-                  itemBuilder: (context, i) {
-                    final data =
-                        docs[i].data() as Map<String, dynamic>;
+                  final cover = images.first;
 
-                    final images =
-                        List<Map<String, dynamic>>.from(data['images'] ?? []);
+                  final int w = (cover['w'] ?? cover['width'] ?? 1);
+                  final int h = (cover['h'] ?? cover['height'] ?? 1);
 
-                    if (images.isEmpty) {
-                      return const SizedBox.shrink();
-                    }
+                  double aspectRatio = (w > 0 && h > 0) ? w / h : 1.0;
+                  aspectRatio = aspectRatio.clamp(0.5, 1.6);
 
-                    // ✅ SAFE DIMENSION EXTRACTION
-                    final cover = images.first;
-
-                    final int w =
-                        (cover['w'] ?? cover['width'] ?? 1);
-                    final int h =
-                        (cover['h'] ?? cover['height'] ?? 1);
-
-                    double aspectRatio =
-                        (w > 0 && h > 0) ? w / h : 1.0;
-
-                    // Clamp to avoid extreme tall / wide images
-                    aspectRatio = aspectRatio.clamp(0.5, 1.6);
-
-                    return GestureDetector(
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => PostDetailPage(
-                              postId: docs[i].id,
-                              post: data,
-                            ),
+                  return GestureDetector(
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => PostDetailPage(
+                            postId: _posts[i].id,
+                            post: data,
                           ),
-                        );
-                      },
-                      child: _pin(images, aspectRatio),
-                    );
-                  },
+                        ),
+                      );
+                    },
+                    child: _pin(images, aspectRatio),
+                  );
+                },
+              ),
+            ),
+
+            /// Loader at bottom
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Center(
+                  child: _loading
+                      ? const CircularProgressIndicator()
+                      : !_hasMore
+                          ? const Text("No more posts")
+                          : const SizedBox.shrink(),
                 ),
               ),
-              const SliverToBoxAdapter(child: SizedBox(height: 32)),
-            ],
-          );
-        },
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  // ---------------- PIN TILE ----------------
-
-  Widget _pin(
-    List<Map<String, dynamic>> images,
-    double aspectRatio,
-  ) {
+  Widget _pin(List<Map<String, dynamic>> images, double aspectRatio) {
     return ClipRRect(
       borderRadius: BorderRadius.circular(20),
       child: AspectRatio(
@@ -144,8 +179,6 @@ class _HomeState extends State<Home> {
       ),
     );
   }
-
-  // ---------------- IMAGE CAROUSEL ----------------
 
   Widget _imageCarousel(List<Map<String, dynamic>> images) {
     final PageController controller = PageController();
@@ -160,25 +193,22 @@ class _HomeState extends State<Home> {
               child: Image.network(
                 images[index]['preview'],
                 fit: BoxFit.cover,
-                loadingBuilder: (_, child, progress) {
-                  if (progress == null) return child;
-                  return Container(color: Colors.grey.shade300);
-                },
               ),
             ),
 
-            // Swipe layer
             if (images.length > 1)
               Positioned.fill(
                 child: PageView.builder(
                   controller: controller,
                   itemCount: images.length,
                   onPageChanged: (i) => setState(() => index = i),
-                  itemBuilder: (_, __) => const SizedBox.shrink(),
+                  itemBuilder: (_, i) => Image.network(
+                    images[i]['preview'],
+                    fit: BoxFit.cover,
+                  ),
                 ),
               ),
 
-            // Dots overlay
             if (images.length > 1)
               Positioned(
                 bottom: 10,
@@ -186,8 +216,8 @@ class _HomeState extends State<Home> {
                 right: 0,
                 child: Center(
                   child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 8, vertical: 4),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
                       color: Colors.black.withOpacity(0.35),
                       borderRadius: BorderRadius.circular(20),
@@ -199,8 +229,8 @@ class _HomeState extends State<Home> {
                         (i) => Container(
                           margin:
                               const EdgeInsets.symmetric(horizontal: 3),
-                          width: i == index ? 6 : 5,
-                          height: i == index ? 6 : 5,
+                          width: i == index ? 7 : 6,
+                          height: i == index ? 7 : 6,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
                             color: i == index
@@ -216,35 +246,6 @@ class _HomeState extends State<Home> {
           ],
         );
       },
-    );
-  }
-
-  // ---------------- SKELETON ----------------
-
-  Widget _imageSkeleton() {
-    return Container(
-      height: 220,
-      decoration: BoxDecoration(
-        color: Colors.grey.shade300,
-        borderRadius: BorderRadius.circular(20),
-      ),
-    );
-  }
-
-  Widget _skeletonFeed() {
-    return CustomScrollView(
-      slivers: [
-        SliverPadding(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          sliver: SliverMasonryGrid.count(
-            crossAxisCount: 2,
-            mainAxisSpacing: 14,
-            crossAxisSpacing: 14,
-            childCount: 8,
-            itemBuilder: (_, __) => _imageSkeleton(),
-          ),
-        ),
-      ],
     );
   }
 }
