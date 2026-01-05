@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:go_router/go_router.dart';
+import '../services/cloudflare.dart';
 
 class Profile extends StatefulWidget {
   final String? userId;
@@ -16,7 +19,7 @@ class _ProfileState extends State<Profile> {
   late final profileUid = widget.userId ?? currentUid;
 
   bool isFollowing = false;
-  bool loading = true;
+  bool isFollowLoading = true;
 
   @override
   void initState() {
@@ -24,9 +27,12 @@ class _ProfileState extends State<Profile> {
     _checkFollow();
   }
 
+  // --- LOGIC (Follow/Unfollow) ---
   Future<void> _checkFollow() async {
-    if (profileUid == currentUid) return;
-
+    if (profileUid == currentUid) {
+      if (mounted) setState(() => isFollowLoading = false);
+      return;
+    }
     final doc = await FirebaseFirestore.instance
         .collection('users')
         .doc(profileUid)
@@ -34,172 +40,452 @@ class _ProfileState extends State<Profile> {
         .doc(currentUid)
         .get();
 
-    setState(() {
-      isFollowing = doc.exists;
-      loading = false;
-    });
+    if (mounted) {
+      setState(() {
+        isFollowing = doc.exists;
+        isFollowLoading = false;
+      });
+    }
   }
 
   Future<void> _toggleFollow() async {
-    final userRef =
-        FirebaseFirestore.instance.collection('users').doc(profileUid);
-    final meRef =
-        FirebaseFirestore.instance.collection('users').doc(currentUid);
+    setState(() => isFollowLoading = true);
+    final batch = FirebaseFirestore.instance.batch();
+    final userRef = FirebaseFirestore.instance.collection('users').doc(profileUid);
+    final meRef = FirebaseFirestore.instance.collection('users').doc(currentUid);
 
     if (isFollowing) {
-      await userRef.collection('followers').doc(currentUid).delete();
-      await meRef.collection('following').doc(profileUid).delete();
+      batch.delete(userRef.collection('followers').doc(currentUid));
+      batch.delete(meRef.collection('following').doc(profileUid));
+      batch.update(userRef, {'followersCount': FieldValue.increment(-1)});
+      batch.update(meRef, {'followingCount': FieldValue.increment(-1)});
     } else {
-      await userRef.collection('followers').doc(currentUid).set({});
-      await meRef.collection('following').doc(profileUid).set({});
+      batch.set(userRef.collection('followers').doc(currentUid), {});
+      batch.set(meRef.collection('following').doc(profileUid), {});
+      batch.update(userRef, {'followersCount': FieldValue.increment(1)});
+      batch.update(meRef, {'followingCount': FieldValue.increment(1)});
     }
+    await batch.commit();
 
-    setState(() => isFollowing = !isFollowing);
+    if (mounted) {
+      setState(() {
+        isFollowing = !isFollowing;
+        isFollowLoading = false;
+      });
+    }
   }
 
-  void _showImage(String url) {
-    showDialog(
-      context: context,
-      builder: (_) => Dialog(
-        backgroundColor: Colors.black,
-        child: InteractiveViewer(
-          child: Image.network(url),
-        ),
-      ),
-    );
-  }
-
+  // --- UI CONSTRUCTION ---
   @override
   Widget build(BuildContext context) {
-    final isMe = profileUid == currentUid;
-
     return Scaffold(
+      backgroundColor: Colors.white,
       appBar: AppBar(
+        backgroundColor: Colors.white,
+        elevation: 0,
+        centerTitle: true,
         title: const Text(
-          "heed",
+          "heed", 
           style: TextStyle(
-            fontFamily: 'InstagramSans',
-            fontSize: 22,
-            fontWeight: FontWeight.bold,
+            color: Colors.black, 
+            fontWeight: FontWeight.w900, 
+            fontSize: 24, 
+            letterSpacing: -1
           ),
         ),
-        centerTitle: true,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.share_outlined, color: Colors.black),
+            onPressed: () {},
+          ),
+          if (profileUid == currentUid)
+            IconButton(
+              icon: const Icon(Icons.settings_outlined, color: Colors.black),
+              onPressed: () async {
+                // Show settings menu with cache clear option
+                showModalBottomSheet(
+                  context: context,
+                  builder: (context) => Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      ListTile(
+                        leading: const Icon(Icons.clear),
+                        title: const Text('Clear Image Cache'),
+                        onTap: () async {
+                          await CloudflareService.clearImageCache();
+                          Navigator.pop(context);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Cache cleared!')),
+                          );
+                        },
+                      ),
+                      ListTile(
+                        leading: const Icon(Icons.logout),
+                        title: const Text('Logout'),
+                        onTap: () async {
+                          await FirebaseAuth.instance.signOut();
+                          await CloudflareService.clearImageCache(); // Clear cache on logout
+                          if (context.mounted) context.go('/login');
+                        },
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+        ],
       ),
-
       body: StreamBuilder<DocumentSnapshot>(
-        stream: FirebaseFirestore.instance
-            .collection('users')
-            .doc(profileUid)
-            .snapshots(),
+        stream: FirebaseFirestore.instance.collection('users').doc(profileUid).snapshots(),
         builder: (context, snap) {
-          if (!snap.hasData) {
-            return const Center(child: CircularProgressIndicator());
-          }
+          if (!snap.hasData) return const Center(child: CircularProgressIndicator());
+          
+          // If user doesn't exist, handle gracefully
+          if (!snap.data!.exists) return const Center(child: Text("User not found"));
 
           final user = snap.data!.data() as Map<String, dynamic>;
 
-          return CustomScrollView(
-            slivers: [
-              SliverToBoxAdapter(
-                child: _header(user, isMe),
+          return DefaultTabController(
+            length: 2,
+            child: NestedScrollView(
+              headerSliverBuilder: (context, innerBoxIsScrolled) {
+                return [
+                  SliverToBoxAdapter(child: _buildPinterestHeader(user)),
+                  SliverPersistentHeader(
+                    delegate: _StickyTabBarDelegate(
+                      const TabBar(
+                        labelColor: Colors.black,
+                        unselectedLabelColor: Colors.grey,
+                        indicatorColor: Colors.black,
+                        indicatorSize: TabBarIndicatorSize.label,
+                        indicatorWeight: 2,
+                        tabs: [
+                          Tab(text: "Created"),
+                          Tab(text: "Saved"), // Pinterest calls "Reposts/Collections" Saved
+                        ],
+                      ),
+                    ),
+                    pinned: true,
+                  ),
+                ];
+              },
+              body: TabBarView(
+                children: [
+                  _MasonryContentGrid(uid: profileUid, isRepost: false),
+                  _MasonryContentGrid(uid: profileUid, isRepost: true),
+                ],
               ),
-
-              /// POSTS GRID
-              SliverPadding(
-                padding: const EdgeInsets.all(12),
-                sliver: StreamBuilder<QuerySnapshot>(
-                  stream: FirebaseFirestore.instance
-                      .collection('posts')
-                      .where('uid', isEqualTo: profileUid)
-                      .orderBy('createdAt', descending: true)
-                      .snapshots(),
-                  builder: (context, snap) {
-                    if (!snap.hasData) {
-                      return const SliverToBoxAdapter(
-                        child: Center(child: CircularProgressIndicator()),
-                      );
-                    }
-
-                    final posts = snap.data!.docs;
-
-                    return SliverMasonryGrid.count(
-                      crossAxisCount: 3,
-                      mainAxisSpacing: 6,
-                      crossAxisSpacing: 6,
-                      childCount: posts.length,
-                      itemBuilder: (_, i) {
-                        final images =
-                            List<Map<String, dynamic>>.from(posts[i]['images']);
-                        return ClipRRect(
-                          borderRadius: BorderRadius.circular(8),
-                          child: Image.network(
-                            images.first['preview'],
-                            fit: BoxFit.cover,
-                          ),
-                        );
-                      },
-                    );
-                  },
-                ),
-              ),
-            ],
+            ),
           );
         },
       ),
     );
   }
 
-  Widget _header(Map<String, dynamic> user, bool isMe) {
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        children: [
-          GestureDetector(
-            onTap: () => _showImage(user['profileImage']),
+  Widget _buildPinterestHeader(Map<String, dynamic> user) {
+    final isMe = profileUid == currentUid;
+    final int followers = user['followersCount'] ?? 0;
+    final int following = user['followingCount'] ?? 0;
+    // Assuming you track 'postsCount' and 'repostsCount' in db. If not, remove them or query them.
+    final int reposts = user['repostsCount'] ?? 0;
+
+    return Column(
+      children: [
+        const SizedBox(height: 20),
+        
+        // 1. CENTERED AVATAR
+        Container(
+          padding: const EdgeInsets.all(3),
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            // Gradient border effect for flair
+            gradient: const LinearGradient(
+              colors: [Color(0xFFE2336B), Color(0xFFFCAC46)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+          child: CircleAvatar(
+            radius: 50,
+            backgroundColor: Colors.white,
             child: CircleAvatar(
-              radius: 45,
+              radius: 47,
               backgroundImage: NetworkImage(user['profileImage']),
             ),
           ),
-          const SizedBox(height: 12),
+        ),
+        
+        const SizedBox(height: 16),
+        
+        // 2. NAME & USERNAME
+        Text(
+          user['name'] ?? "User",
+          style: const TextStyle(
+            fontSize: 22,
+            fontWeight: FontWeight.bold,
+            letterSpacing: -0.5,
+          ),
+        ),
+        Text(
+          "@${user['username']}",
+          style: TextStyle(
+            fontSize: 14,
+            color: Colors.grey[600],
+            fontWeight: FontWeight.w500,
+          ),
+        ),
 
-          Text(
-            "@${user['username']}",
-            style: const TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 16,
+        const SizedBox(height: 20),
+
+        // 3. STATS ROW (Clean, airy, Pinterest-style text)
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            _statItem("$followers", "followers"),
+            _divider(),
+            _statItem("$following", "following"),
+            _divider(),
+            _statItem("$reposts", "reposts"),
+          ],
+        ),
+
+        const SizedBox(height: 20),
+
+        // 4. BIO
+        if ((user['bio'] ?? '').isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 40),
+            child: Text(
+              user['bio'],
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey[800],
+                height: 1.4,
+              ),
             ),
           ),
 
-          const SizedBox(height: 6),
-          Text(user['bio'] ?? ""),
+        const SizedBox(height: 24),
 
-          const SizedBox(height: 12),
-
-          if (!isMe)
-            ElevatedButton(
-              onPressed: loading ? null : _toggleFollow,
-              style: ElevatedButton.styleFrom(
-                backgroundColor:
-                    isFollowing ? Colors.grey[300] : Colors.blue,
+        // 5. ACTION BUTTONS (Pill Shaped)
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            if (isMe)
+              _pillButton(text: "Edit Profile", onTap: () {})
+            else ...[
+              _pillButton(
+                text: isFollowing ? "Following" : "Follow",
+                isPrimary: !isFollowing,
+                onTap: isFollowLoading ? () {} : _toggleFollow,
               ),
-              child: Text(
-                isFollowing ? "Following" : "Follow",
-                style: TextStyle(
-                  color: isFollowing ? Colors.black : Colors.white,
-                ),
-              ),
-            ),
+              const SizedBox(width: 12),
+              _pillButton(text: "Message", onTap: () {}),
+            ],
+          ],
+        ),
+        const SizedBox(height: 20),
+      ],
+    );
+  }
 
-          if (isMe)
-            OutlinedButton(
-              onPressed: () {
-                // TODO: edit bio modal
-              },
-              child: const Text("Edit Profile"),
-            ),
+  Widget _statItem(String count, String label) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
+        children: [
+          Text(
+            count,
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+          Text(
+            label,
+            style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+          ),
         ],
       ),
     );
   }
+
+  Widget _divider() {
+    return Container(
+      height: 20,
+      width: 1,
+      color: Colors.grey[300],
+    );
+  }
+
+  Widget _pillButton({
+    required String text, 
+    required VoidCallback onTap, 
+    bool isPrimary = false
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+        decoration: BoxDecoration(
+          color: isPrimary ? Colors.black : Colors.grey[200],
+          borderRadius: BorderRadius.circular(30), // Pill shape
+        ),
+        child: Text(
+          text,
+          style: TextStyle(
+            color: isPrimary ? Colors.white : Colors.black,
+            fontWeight: FontWeight.w600,
+            fontSize: 14,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// =================================================================
+// THE MASONRY GRID (Pinterest Style)
+// =================================================================
+
+class _MasonryContentGrid extends StatelessWidget {
+  final String uid;
+  final bool isRepost;
+
+  const _MasonryContentGrid({required this.uid, required this.isRepost});
+
+  @override
+  Widget build(BuildContext context) {
+    // If it's "Created" (Posts), query posts collection
+    // If it's "Saved/Reposts", you might query user's subcollection or array. 
+    // For this snippet, I'll assume we query 'posts' for both but filter differently
+    // or just show the same logic for demonstration.
+    
+    // NOTE: For 'reposts', typically you fetch the array of IDs from user doc, 
+    // then query posts 'whereIn'. Firestore 'whereIn' is limited to 10.
+    // A robust app usually duplicates repost data into a subcollection 'user_reposts'.
+    
+    Query query = FirebaseFirestore.instance.collection('posts');
+    
+    if (!isRepost) {
+      query = query.where('uid', isEqualTo: uid).orderBy('createdAt', descending: true);
+    } else {
+      // Logic for Reposts (Assuming you have a way to filter them, e.g. a 'repostedBy' array field in posts 
+      // OR querying a subcollection). 
+      // For Demo: I will just show *all* posts to demonstrate the layout.
+      // REPLACE THIS with your actual Repost query logic.
+      query = query.limit(10); 
+    }
+
+    return StreamBuilder<QuerySnapshot>(
+      stream: query.snapshots(),
+      builder: (context, snap) {
+        if (!snap.hasData) return const Center(child: CircularProgressIndicator());
+        
+        final docs = snap.data!.docs;
+        if (docs.isEmpty) {
+          return Center(
+            child: Text(
+              isRepost ? "No pins saved yet." : "No posts yet.",
+              style: TextStyle(color: Colors.grey[400]),
+            ),
+          );
+        }
+
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          child: MasonryGridView.count(
+            crossAxisCount: 2, // 2 Columns = Pinterest Style
+            mainAxisSpacing: 10,
+            crossAxisSpacing: 10,
+            itemCount: docs.length,
+            itemBuilder: (context, index) {
+              final data = docs[index].data() as Map<String, dynamic>;
+              final images = List.from(data['images'] ?? []);
+              final imgUrl = images.isNotEmpty ? images.first['preview'] : '';
+              
+              // Random aspect ratio for demo if height missing, 
+              // or use actual dimensions if available in DB
+              final double aspectRatio = (index % 3 == 0) ? 0.7 : 1.0; 
+
+              return GestureDetector(
+                onTap: () {
+                   // Open Detail Page
+                },
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // IMAGE CARD
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(16), // Rounded corners are key for Pinterest look
+                      child: CachedNetworkImage(
+                        imageUrl: imgUrl,
+                        fit: BoxFit.cover,
+                        placeholder: (context, url) => const Center(child: CircularProgressIndicator()),
+                        errorWidget: (context, url, error) => Container(height: 150, color: Colors.grey[200]),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    
+                    // TITLE / META (Optional, Pinterest usually shows title below)
+                    if (data['title'] != null)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 4),
+                        child: Text(
+                          data['title'],
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                    
+                    // "Reposted" Badge if applicable
+                    if (isRepost)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4, left: 4),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.repeat, size: 12, color: Colors.grey),
+                            const SizedBox(width: 4),
+                            Text(
+                              "reposted",
+                              style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
+}
+
+// =================================================================
+// STICKY HEADER DELEGATE
+// =================================================================
+class _StickyTabBarDelegate extends SliverPersistentHeaderDelegate {
+  final TabBar _tabBar;
+  _StickyTabBarDelegate(this._tabBar);
+
+  @override
+  double get minExtent => _tabBar.preferredSize.height;
+  @override
+  double get maxExtent => _tabBar.preferredSize.height;
+
+  @override
+  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
+    return Container(
+      color: Colors.white,
+      child: _tabBar,
+    );
+  }
+
+  @override
+  bool shouldRebuild(_StickyTabBarDelegate oldDelegate) => false;
 }

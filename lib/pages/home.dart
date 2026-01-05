@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';// for ScrollController, Scaffold
 import 'package:flutter/rendering.dart';// for ScrollDirection
 import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';// for SliverMasonryGrid(masonry (Pinterest-like) grid)
 import 'package:cloud_firestore/cloud_firestore.dart'; // for Firestore database
+import 'package:cached_network_image/cached_network_image.dart';
 
 import '../layout/main_shell.dart';
 import 'post_detail.dart';
@@ -189,42 +190,26 @@ class _HomeState extends State<Home> {
 
         return Stack(
           children: [
-            // Main image viewer with PageView
-            PageView.builder(
-              controller: controller,
-              itemCount: images.length,
-              onPageChanged: (i) => setState(() => index = i),
-              itemBuilder: (_, i) => Image.network(
-                images[i]['preview'] ?? images[i]['original'] ?? '',
+            Positioned.fill(
+              child: Image.network(
+                images[index]['preview'],
                 fit: BoxFit.cover,
-                cacheWidth: 400,
-                cacheHeight: 600,
-                loadingBuilder: (context, child, loadingProgress) {
-                  if (loadingProgress == null) return child;
-                  return Container(
-                    color: Colors.grey.shade200,
-                    child: Center(
-                      child: CircularProgressIndicator(
-                        value: loadingProgress.expectedTotalBytes != null
-                            ? loadingProgress.cumulativeBytesLoaded /
-                                loadingProgress.expectedTotalBytes!
-                            : null,
-                      ),
-                    ),
-                  );
-                },
-                errorBuilder: (context, error, stackTrace) {
-                  return Container(
-                    color: Colors.grey.shade300,
-                    child: const Center(
-                      child: Icon(Icons.broken_image, color: Colors.grey),
-                    ),
-                  );
-                },
               ),
             ),
 
-            // Pagination dots
+            if (images.length > 1)
+              Positioned.fill(
+                child: PageView.builder(
+                  controller: controller,
+                  itemCount: images.length,
+                  onPageChanged: (i) => setState(() => index = i),
+                  itemBuilder: (_, i) => Image.network(
+                    images[i]['preview'],
+                    fit: BoxFit.cover,
+                  ),
+                ),
+              ),
+
             if (images.length > 1)
               Positioned(
                 bottom: 10,
