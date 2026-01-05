@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'comment_sheet.dart'; 
 
 class PostDetailPage extends StatefulWidget {
@@ -420,8 +421,8 @@ class _PostDetailPageState extends State<PostDetailPage> {
                   child: AspectRatio(
                      // Mimic different heights for staggered effect
                     aspectRatio: (i % 2 == 0) ? 0.7 : 0.85,
-                    child: Image.network(
-                      img['preview'],
+                    child: CachedNetworkImage(
+                      imageUrl: img['preview'],
                       fit: BoxFit.cover,
                       placeholder: (context, url) => const Center(child: CircularProgressIndicator()),
                       errorWidget: (context, url, error) => const Icon(Icons.error),
