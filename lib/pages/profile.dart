@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:go_router/go_router.dart';
 import '../services/cloudflare.dart';
 
@@ -105,30 +104,90 @@ class _ProfileState extends State<Profile> {
                 // Show settings menu with cache clear option
                 showModalBottomSheet(
                   context: context,
-                  builder: (context) => Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      ListTile(
-                        leading: const Icon(Icons.clear),
-                        title: const Text('Clear Image Cache'),
-                        onTap: () async {
-                          await CloudflareService.clearImageCache();
-                          Navigator.pop(context);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Cache cleared!')),
-                          );
-                        },
+                  builder: (context) => Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: Colors.grey[100],
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        padding: const EdgeInsets.all(4),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Material(
+                              color: Colors.transparent,
+                              child: InkWell(
+                                onTap: () async {
+                                  await CloudflareService.clearImageCache();
+                                  Navigator.pop(context);
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text('Cache cleared!')),
+                                  );
+                                },
+                                borderRadius: BorderRadius.circular(12),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: const [
+                                      Icon(Icons.clear, size: 20),
+                                      SizedBox(height: 8),
+                                      Text(
+                                        'Clear Image Cache',
+                                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Container(height: 1, color: Colors.grey[300]),
+                            const SizedBox(height: 6),
+                            Material(
+                              color: Colors.transparent,
+                              child: InkWell(
+                                onTap: () async {
+                                  try {
+                                    Navigator.pop(context);
+                                    await FirebaseAuth.instance.signOut();
+                                    await CloudflareService.clearImageCache();
+                                    if (context.mounted) {
+                                      context.go('/login');
+                                    }
+                                  } catch (e) {
+                                    if (context.mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(content: Text('Logout failed: $e')),
+                                      );
+                                    }
+                                  }
+                                },
+                                borderRadius: BorderRadius.circular(12),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: const [
+                                      Icon(Icons.logout, size: 20),
+                                      SizedBox(height: 8),
+                                      Text(
+                                        'Logout',
+                                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                      ListTile(
-                        leading: const Icon(Icons.logout),
-                        title: const Text('Logout'),
-                        onTap: () async {
-                          await FirebaseAuth.instance.signOut();
-                          await CloudflareService.clearImageCache(); // Clear cache on logout
-                          if (context.mounted) context.go('/login');
-                        },
-                      ),
-                    ],
+                    ),
                   ),
                 );
               },
@@ -210,7 +269,8 @@ class _ProfileState extends State<Profile> {
             backgroundColor: Colors.white,
             child: CircleAvatar(
               radius: 47,
-              backgroundImage: NetworkImage(user['profileImage']),
+              backgroundImage: NetworkImage(user['profileImage'] ?? ''),
+              onBackgroundImageError: (exception, stackTrace) {},
             ),
           ),
         ),
@@ -416,11 +476,30 @@ class _MasonryContentGrid extends StatelessWidget {
                     // IMAGE CARD
                     ClipRRect(
                       borderRadius: BorderRadius.circular(16), // Rounded corners are key for Pinterest look
-                      child: CachedNetworkImage(
-                        imageUrl: imgUrl,
+                      child: Image.network(
+                        imgUrl,
                         fit: BoxFit.cover,
-                        placeholder: (context, url) => const Center(child: CircularProgressIndicator()),
-                        errorWidget: (context, url, error) => Container(height: 150, color: Colors.grey[200]),
+                        cacheWidth: 400,
+                        cacheHeight: 600,
+                        loadingBuilder: (context, child, loadingProgress) {
+                          if (loadingProgress == null) return child;
+                          return Container(
+                            height: 200,
+                            color: Colors.grey[200],
+                            child: Center(
+                              child: CircularProgressIndicator(
+                                value: loadingProgress.expectedTotalBytes != null
+                                    ? loadingProgress.cumulativeBytesLoaded / loadingProgress.expectedTotalBytes!
+                                    : null,
+                              ),
+                            ),
+                          );
+                        },
+                        errorBuilder: (context, error, stackTrace) => Container(
+                          height: 200,
+                          color: Colors.grey[200],
+                          child: const Icon(Icons.image_not_supported, color: Colors.grey),
+                        ),
                       ),
                     ),
                     const SizedBox(height: 8),

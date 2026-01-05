@@ -118,36 +118,51 @@ class _OnboardingPageState extends State<OnboardingPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
-      body: SafeArea(
-        child: Column(
-          children: [
-            _header(),
-            Expanded(
-              child: PageView(
-                controller: _pageController,
-                physics: const NeverScrollableScrollPhysics(),
-                children: [
-                  _stepAccountType(), // 0
-                  
-                  // GENERAL FLOW
-                  if (_accountType == 'general') ...[
-                    _stepProfilePicAndBasic(), // 1
-                    _stepGeneralSocial(), // 2
-                    _stepGeneralInterests(), // 3
+    return WillPopScope(
+      onWillPop: () async {
+        if (_currentStep > 0) {
+          _pageController.previousPage(
+            duration: const Duration(milliseconds: 400),
+            curve: Curves.easeOutCubic,
+          );
+          setState(() => _currentStep--);
+          return false;
+        } else {
+          if (mounted) {
+            context.go('/login?from=onboarding');
+          }
+          return false;
+        }
+      },
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF8FAFC),
+        body: SafeArea(
+          child: Column(
+            children: [
+              _header(),
+              Expanded(
+                child: PageView(
+                  controller: _pageController,
+                  physics: const NeverScrollableScrollPhysics(),
+                  children: [
+                    _stepAccountType(), // 0
+                    // GENERAL FLOW
+                    if (_accountType == 'general') ...[
+                      _stepProfilePicAndBasic(), // 1
+                      _stepGeneralSocial(), // 2
+                      _stepGeneralInterests(), // 3
+                    ],
+                    // BUSINESS FLOW
+                    if (_accountType == 'business') ...[
+                      _stepBusinessProfile(), // 1 (Pic + Basic)
+                      _stepBusinessDetails(), // 2 (Web, Email, Category)
+                      _stepBusinessLegal(), // 3 (GST, Address)
+                    ]
                   ],
-
-                  // BUSINESS FLOW
-                  if (_accountType == 'business') ...[
-                    _stepBusinessProfile(), // 1 (Pic + Basic)
-                    _stepBusinessDetails(), // 2 (Web, Email, Category)
-                    _stepBusinessLegal(), // 3 (GST, Address)
-                  ]
-                ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
