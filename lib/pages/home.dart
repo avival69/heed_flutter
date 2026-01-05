@@ -189,26 +189,42 @@ class _HomeState extends State<Home> {
 
         return Stack(
           children: [
-            Positioned.fill(
-              child: Image.network(
-                images[index]['preview'],
+            // Main image viewer with PageView
+            PageView.builder(
+              controller: controller,
+              itemCount: images.length,
+              onPageChanged: (i) => setState(() => index = i),
+              itemBuilder: (_, i) => Image.network(
+                images[i]['preview'] ?? images[i]['original'] ?? '',
                 fit: BoxFit.cover,
+                cacheWidth: 400,
+                cacheHeight: 600,
+                loadingBuilder: (context, child, loadingProgress) {
+                  if (loadingProgress == null) return child;
+                  return Container(
+                    color: Colors.grey.shade200,
+                    child: Center(
+                      child: CircularProgressIndicator(
+                        value: loadingProgress.expectedTotalBytes != null
+                            ? loadingProgress.cumulativeBytesLoaded /
+                                loadingProgress.expectedTotalBytes!
+                            : null,
+                      ),
+                    ),
+                  );
+                },
+                errorBuilder: (context, error, stackTrace) {
+                  return Container(
+                    color: Colors.grey.shade300,
+                    child: const Center(
+                      child: Icon(Icons.broken_image, color: Colors.grey),
+                    ),
+                  );
+                },
               ),
             ),
 
-            if (images.length > 1)
-              Positioned.fill(
-                child: PageView.builder(
-                  controller: controller,
-                  itemCount: images.length,
-                  onPageChanged: (i) => setState(() => index = i),
-                  itemBuilder: (_, i) => Image.network(
-                    images[i]['preview'],
-                    fit: BoxFit.cover,
-                  ),
-                ),
-              ),
-
+            // Pagination dots
             if (images.length > 1)
               Positioned(
                 bottom: 10,
@@ -216,8 +232,7 @@ class _HomeState extends State<Home> {
                 right: 0,
                 child: Center(
                   child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
                       color: Colors.black.withOpacity(0.35),
                       borderRadius: BorderRadius.circular(20),
@@ -227,15 +242,12 @@ class _HomeState extends State<Home> {
                       children: List.generate(
                         images.length,
                         (i) => Container(
-                          margin:
-                              const EdgeInsets.symmetric(horizontal: 3),
+                          margin: const EdgeInsets.symmetric(horizontal: 3),
                           width: i == index ? 7 : 6,
                           height: i == index ? 7 : 6,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            color: i == index
-                                ? Colors.white
-                                : Colors.white70,
+                            color: i == index ? Colors.white : Colors.white70,
                           ),
                         ),
                       ),

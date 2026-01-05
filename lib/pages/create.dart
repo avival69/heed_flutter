@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'caption_page.dart';
 
@@ -28,7 +29,13 @@ class _CreatePageState extends State<CreatePage> {
       limit: 4,
     );
 
-    if (images.isEmpty) return;
+    // If the user cancels the picker (or selects no images), return to home.
+    if (images == null || images.isEmpty) {
+      if (mounted) {
+        context.go('/home');
+      }
+      return;
+    }
 
     final files = images.map((e) => File(e.path)).toList();
 
@@ -55,10 +62,16 @@ class _CreatePageState extends State<CreatePage> {
 
   @override
   Widget build(BuildContext context) {
-    // Empty scaffold — user never stays here
-    return const Scaffold(
-      backgroundColor: Colors.black,
-      body: Center(child: CircularProgressIndicator()),
+    // Handle Android/system back button: go to the home route
+    return WillPopScope(
+      onWillPop: () async {
+        context.go('/home');
+        return false;
+      },
+      child: const Scaffold(
+        backgroundColor: Colors.black,
+        body: Center(child: CircularProgressIndicator()),
+      ),
     );
   }
 }

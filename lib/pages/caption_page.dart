@@ -148,43 +148,49 @@ class _CaptionPageState extends State<CaptionPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      resizeToAvoidBottomInset: true,
-      appBar: AppBar(
-        title: const Text("New Post"),
-        leading: BackButton(onPressed: () => context.pop()),
-        actions: [
-          TextButton(
-            onPressed: loading ? null : post,
-            child: loading
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Text("Post"),
-          ),
-        ],
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.only(bottom: 40),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _imageCarousel(),
-            _dots(),
-            _section("Title", "Add a title (optional)", _title),
-            _section("Description", "Write a caption…", _caption, max: 4),
-            _section(
-              "Price",
-              "Optional",
-              _price,
-              keyboard: TextInputType.number,
+    return WillPopScope(
+      onWillPop: () async {
+        context.go('/home');
+        return false;
+      },
+      child: Scaffold(
+        resizeToAvoidBottomInset: true,
+        appBar: AppBar(
+          title: const Text("New Post"),
+          leading: BackButton(onPressed: () => context.go('/home')),
+          actions: [
+            TextButton(
+              onPressed: loading ? null : post,
+              child: loading
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text("Post"),
             ),
-            _tags(),
-            const Divider(height: 32),
-            _engagement(),
           ],
+        ),
+        body: SingleChildScrollView(
+          padding: const EdgeInsets.only(bottom: 40),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _imageCarousel(),
+              _dots(),
+              _section("Title", "Add a title (optional)", _title),
+              _section("Description", "Write a caption…", _caption, max: 4),
+              _section(
+                "Price",
+                "Optional",
+                _price,
+                keyboard: TextInputType.number,
+              ),
+              _tags(),
+              const Divider(height: 32),
+              _engagement(),
+            ],
+          ),
         ),
       ),
     );

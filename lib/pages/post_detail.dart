@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'comment_sheet.dart'; 
+import 'comment_sheet.dart';
+import 'package:go_router/go_router.dart';
 
 class PostDetailPage extends StatefulWidget {
   final String postId;
@@ -97,15 +98,33 @@ class _PostDetailPageState extends State<PostDetailPage> {
                   ),
                 ),
                 
-                // Back Button
-                Visibility(
-                  visible: _isScrolling,
-                  child: Positioned(
-                    top: MediaQuery.of(context).padding.top + 10,
-                    left: 16,
-                    child: _circleButton(
-                      icon: Icons.arrow_back,
-                      onTap: () => Navigator.pop(context),
+                // Back Button (always visible) — pop to previous route
+                Positioned(
+                  top: MediaQuery.of(context).padding.top + 10,
+                  left: 16,
+                  child: Container(
+                    width: 56,
+                    height: 56,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.black12, width: 1),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.25),
+                          blurRadius: 12,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: () => Navigator.pop(context),
+                        borderRadius: BorderRadius.circular(28),
+                        child: const Icon(Icons.arrow_back, color: Colors.black87, size: 22),
+                        splashColor: Colors.black.withOpacity(0.1),
+                      ),
                     ),
                   ),
                 ),
@@ -258,7 +277,11 @@ class _PostDetailPageState extends State<PostDetailPage> {
           .get(),
       builder: (_, snap) {
         if (!snap.hasData) return const SizedBox.shrink();
-        final u = snap.data!.data() as Map<String, dynamic>;
+        final doc = snap.data!;
+        if (!doc.exists) return const SizedBox.shrink();
+        final raw = doc.data();
+        if (raw == null) return const SizedBox.shrink();
+        final u = raw as Map<String, dynamic>;
 
         return Row(
           children: [
@@ -366,8 +389,13 @@ class _PostDetailPageState extends State<PostDetailPage> {
           crossAxisSpacing: 10,
           itemCount: docs.length,
           itemBuilder: (_, i) {
-            final data = docs[i].data() as Map<String, dynamic>;
-            final img = data['images'][0];
+            final raw = docs[i].data();
+            if (raw == null) return const SizedBox.shrink();
+            final data = raw as Map<String, dynamic>;
+            final imagesList = (data['images'] as List<dynamic>?) ?? [];
+            if (imagesList.isEmpty) return const SizedBox.shrink();
+            final img = imagesList[0] as Map<String, dynamic>?;
+            if (img == null) return const SizedBox.shrink();
 
             return GestureDetector(
               onTap: () {
@@ -392,7 +420,7 @@ class _PostDetailPageState extends State<PostDetailPage> {
                      // Mimic different heights for staggered effect
                     aspectRatio: (i % 2 == 0) ? 0.7 : 0.85,
                     child: Image.network(
-                      img['preview'],
+                      img['preview'] ?? '',
                       fit: BoxFit.cover,
                     ),
                   ),
@@ -409,17 +437,31 @@ class _PostDetailPageState extends State<PostDetailPage> {
     required IconData icon,
     required VoidCallback onTap,
   }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 42,
-        height: 42,
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.8), // Slightly transparent
-          shape: BoxShape.circle,
-          border: Border.all(color: Colors.black12),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(32),
+        splashColor: Colors.black12,
+        highlightColor: Colors.transparent,
+        child: Container(
+          width: 56,
+          height: 56,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.98),
+            shape: BoxShape.circle,
+            border: Border.all(color: Colors.black12),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.18),
+                blurRadius: 8,
+                offset: const Offset(0, 3),
+              ),
+            ],
+          ),
+          child: Icon(icon, color: Colors.black87, size: 20),
         ),
-        child: Icon(icon, color: Colors.black, size: 20),
       ),
     );
   }
