@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';// for ScrollController, Scaffold
 import 'package:flutter/rendering.dart';// for ScrollDirection
 import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';// for SliverMasonryGrid(masonry (Pinterest-like) grid)
 import 'package:cloud_firestore/cloud_firestore.dart'; // for Firestore database
+import 'package:cached_network_image/cached_network_image.dart';
 
 import '../layout/main_shell.dart';
 import 'post_detail.dart';
@@ -190,9 +191,11 @@ class _HomeState extends State<Home> {
         return Stack(
           children: [
             Positioned.fill(
-              child: Image.network(
-                images[index]['preview'],
+              child: CachedNetworkImage(
+                imageUrl: images[index]['preview'],
                 fit: BoxFit.cover,
+                placeholder: (context, url) => const Center(child: CircularProgressIndicator()),
+                errorWidget: (context, url, error) => const Icon(Icons.error),
               ),
             ),
 
@@ -202,9 +205,11 @@ class _HomeState extends State<Home> {
                   controller: controller,
                   itemCount: images.length,
                   onPageChanged: (i) => setState(() => index = i),
-                  itemBuilder: (_, i) => Image.network(
-                    images[i]['preview'],
+                  itemBuilder: (_, i) => CachedNetworkImage(
+                    imageUrl: images[i]['preview'],
                     fit: BoxFit.cover,
+                    placeholder: (context, url) => const Center(child: CircularProgressIndicator()),
+                    errorWidget: (context, url, error) => const Icon(Icons.error),
                   ),
                 ),
               ),

@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 
 class CloudflareService {
   static const String uploadEndpoint =
@@ -30,5 +31,10 @@ class CloudflareService {
     }
 
     return jsonDecode(body);
+  }
+
+  /// Clear all cached images
+  static Future<void> clearImageCache() async {
+    await DefaultCacheManager().emptyCache();
   }
 }
