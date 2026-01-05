@@ -1,0 +1,1 @@
+ & "D:\installedfiles\android Studio\jbr\bin\keytool.exe" -list -v -alias androiddebugkey -keystore "C:\Users\ASUS\.android\debug.keystore" -storepass android -keypass android

@@ -1,0 +1,34 @@
+import 'dart:io';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+
+class CloudflareService {
+  static const String uploadEndpoint =
+      "https://heed-uploader.tuaswinkrishna.workers.dev";
+
+  /// Uploads image via Worker
+  /// Returns:
+  /// {
+  ///   preview: String,
+  ///   original: String
+  /// }
+  Future<Map<String, dynamic>> uploadImage(File file) async {
+    final request = http.MultipartRequest(
+      "POST",
+      Uri.parse(uploadEndpoint),
+    );
+
+    request.files.add(
+      await http.MultipartFile.fromPath("file", file.path),
+    );
+
+    final response = await request.send();
+    final body = await response.stream.bytesToString();
+
+    if (response.statusCode != 200) {
+      throw Exception("Upload failed: $body");
+    }
+
+    return jsonDecode(body);
+  }
+}

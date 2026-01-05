@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "418768010568",
+    "project_id": "heed-38138",
+    "storage_bucket": "heed-38138.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:418768010568:android:b35ecea4da577fe87d477d",
+        "android_client_info": {
+          "package_name": "com.example.heed"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBn2p3SaVa3H4KuAfh0u-UoVhHi-4XCj4I"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
