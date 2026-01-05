@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'comment_sheet.dart'; // Ensure this file exists in your project
+import 'comment_sheet.dart'; 
 
 class PostDetailPage extends StatefulWidget {
   final String postId;
