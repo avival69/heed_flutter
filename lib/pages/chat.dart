@@ -64,35 +64,42 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
     return Column(
       children: [
         _buildSearchBar(),
-        Expanded(
-          child: StreamBuilder<QuerySnapshot>(
-            stream: FirebaseFirestore.instance
-                .collection('chats')
-                .where('participants', arrayContains: currentUid)
-                .orderBy('lastMessageTime', descending: true)
-                .snapshots(),
-            builder: (_, snap) {
-              if (!snap.hasData) return const Center(child: CircularProgressIndicator());
-              if (snap.data!.docs.isEmpty) {
-                return const Center(
-                  child: Text('No messages yet', style: TextStyle(color: Colors.grey)),
-                );
-              }
-
-              return ListView.builder(
-                itemCount: snap.data!.docs.length,
-                itemBuilder: (_, i) {
-                  final chat = snap.data!.docs[i].data() as Map<String, dynamic>;
-                  final otherUid = (chat['participants'] as List<dynamic>)
-                      .firstWhere((uid) => uid != currentUid);
-
-                  return _buildChatTile(otherUid, chat);
-                },
-              );
-            },
-          ),
-        ),
+        Expanded(child: _buildUserSearchResults()),
       ],
+    );
+  }
+
+  Widget _buildUserSearchResults() {
+    final query = _searchController.text.trim();
+    if (query.isEmpty) {
+      return const Center(child: Text('Type to search users...', style: TextStyle(color: Colors.grey)));
+    }
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('users')
+          .where('name', isGreaterThanOrEqualTo: query)
+          .where('name', isLessThanOrEqualTo: query + '\uf8ff')
+          .snapshots(),
+      builder: (_, snap) {
+        if (!snap.hasData) return const Center(child: CircularProgressIndicator());
+        final docs = snap.data!.docs;
+        if (docs.isEmpty) {
+          return const Center(child: Text('No users found', style: TextStyle(color: Colors.grey)));
+        }
+        return ListView.builder(
+          itemCount: docs.length,
+          itemBuilder: (_, i) {
+            final user = docs[i].data() as Map<String, dynamic>;
+            return ListTile(
+              leading: CircleAvatar(
+                backgroundImage: NetworkImage(user['profileImage'] ?? ''),
+              ),
+              title: Text(user['name'] ?? 'Unknown'),
+              subtitle: Text(user['email'] ?? ''),
+            );
+          },
+        );
+      },
     );
   }
 
@@ -154,33 +161,7 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildChatTile(String otherUid, Map<String, dynamic> chat) {
-    return FutureBuilder<DocumentSnapshot>(
-      future: FirebaseFirestore.instance.collection('users').doc(otherUid).get(),
-      builder: (_, snap) {
-        if (!snap.hasData) return const SizedBox.shrink();
-        final user = snap.data!.data() as Map<String, dynamic>;
-
-        return ListTile(
-          leading: CircleAvatar(
-            radius: 24,
-            backgroundImage: NetworkImage(user['profileImage'] ?? ''),
-          ),
-          title: Text(user['name'] ?? 'Unknown'),
-          subtitle: Text(
-            chat['lastMessage'] ?? '',
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(color: Colors.grey.shade600),
-          ),
-          onTap: () {
-            // TODO: Open chat conversation
-          },
-        );
-      },
-    );
-  }
-
+  // ==================== REQUESTS TAB ====================
   Widget _buildRequestTile(Map<String, dynamic> req, String reqId) {
     return FutureBuilder<DocumentSnapshot>(
       future: FirebaseFirestore.instance.collection('users').doc(req['senderUid']).get(),
@@ -194,7 +175,7 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
             backgroundImage: NetworkImage(user['profileImage'] ?? ''),
           ),
           title: Text(user['name'] ?? 'Unknown'),
-          subtitle: const Text('Sent you a message request'),
+          subtitle: Text('@${user['username'] ?? ''} sent you a message request'),
           trailing: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -220,14 +201,6 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
         .collection('chatRequests')
         .doc(reqId)
         .update({'status': 'accepted'});
-
-    // Create chat document
-    final chatId = _getChatId(currentUid!, senderUid);
-    await FirebaseFirestore.instance.collection('chats').doc(chatId).set({
-      'participants': [currentUid, senderUid],
-      'lastMessage': '',
-      'lastMessageTime': DateTime.now(),
-    });
   }
 
   Future<void> _declineRequest(String reqId) async {
@@ -235,36 +208,5 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
         .collection('chatRequests')
         .doc(reqId)
         .update({'status': 'declined'});
-  }
-
-  Future<void> _sendChatRequest(String recipientUid) async {
-    // Check if request already exists
-    final existing = await FirebaseFirestore.instance
-        .collection('chatRequests')
-        .where('senderUid', isEqualTo: currentUid)
-        .where('recipientUid', isEqualTo: recipientUid)
-        .get();
-
-    if (existing.docs.isNotEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Request already sent')),
-      );
-      return;
-    }
-
-    await FirebaseFirestore.instance.collection('chatRequests').add({
-      'senderUid': currentUid,
-      'recipientUid': recipientUid,
-      'status': 'pending',
-      'timestamp': DateTime.now(),
-    });
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Chat request sent!')),
-    );
-  }
-
-  String _getChatId(String uid1, String uid2) {
-    return uid1.compareTo(uid2) < 0 ? '$uid1-$uid2' : '$uid2-$uid1';
   }
 }

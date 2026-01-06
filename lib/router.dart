@@ -4,7 +4,7 @@ import 'package:go_router/go_router.dart';
 
 // auth pages
 import 'auth/login.dart';
-import 'auth/signup.dart';
+
 
 // onboarding
 import 'pages/onboarding.dart';
@@ -43,7 +43,7 @@ final GoRouter router = GoRouter(
     final loggedIn = user != null;
     final location = state.matchedLocation;
 
-    final authRoutes = ['/login', '/signup'];
+    final authRoutes = ['/login', '/signup', '/onboarding'];
 
     // 🚫 Not logged in
     if (!loggedIn && !authRoutes.contains(location)) {
@@ -52,7 +52,12 @@ final GoRouter router = GoRouter(
 
     // 🚫 Logged in → no auth pages, EXCEPT allow /login if coming from onboarding
     if (loggedIn && authRoutes.contains(location)) {
+      // Only redirect to onboarding if coming from signup or onboarding completion
       if (location == '/login' && state.uri.queryParameters['from'] == 'onboarding') {
+        return null;
+      }
+      // If user is on /login after hot restart or manual navigation, stay on /login
+      if (location == '/login') {
         return null;
       }
       return '/onboarding';
@@ -70,10 +75,6 @@ final GoRouter router = GoRouter(
     GoRoute(
       path: '/login',
       builder: (context, state) => const LoginPage(),
-    ),
-    GoRoute(
-      path: '/signup',
-      builder: (context, state) => const SignupPage(),
     ),
     GoRoute(
       path: '/onboarding',

@@ -9,7 +9,8 @@ class DatabaseService {
   // ============================================================
 
   Future<void> createGeneralUser({
-    required User user,
+    required String uid,
+    required String? email,
     required String name,
     required int age,
     required String gender,
@@ -19,9 +20,9 @@ class DatabaseService {
     required String profileImageUrl,
     required List<String> interests,
   }) async {
-    await _db.collection('users').doc(user.uid).set({
-      "uid": user.uid,
-      "email": user.email,
+    await _db.collection('users').doc(uid).set({
+      "uid": uid,
+      "email": email,
       "name": name,
       "username": username.toLowerCase(),
       "profileImage": profileImageUrl,
@@ -239,7 +240,8 @@ class DatabaseService {
   }
   // ---------- BUSINESS USER ----------
   Future<void> createBusinessUser({
-    required User user,
+    required String uid,
+    required String? email,
     required String companyName,
     required String phone,
     required String gst,
@@ -249,13 +251,13 @@ class DatabaseService {
     required String publicEmail,
     required String profileImageUrl, // Logo
   }) async {
-    await _db.collection('users').doc(user.uid).set({
+    await _db.collection('users').doc(uid).set({
       // --- Identity ---
-      "uid": user.uid,
-      "email": user.email, // Login Email
+      "uid": uid,
+      "email": email, // Login Email
       "role": "business",
       "status": "pending",
-      
+    
       // --- Visuals ---
       "profileImage": profileImageUrl, 
       "bio": "Welcome to $companyName", // Default bio
@@ -267,7 +269,7 @@ class DatabaseService {
         "phone": phone,
         "address": address,
       },
-      
+    
       "category": category,
       "website": website,
       "publicEmail": publicEmail,
