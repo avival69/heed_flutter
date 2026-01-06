@@ -433,19 +433,12 @@ class _PostDetailPageState extends State<PostDetailPage> {
                     child: CachedNetworkImage(
                       imageUrl: img['preview'],
                       fit: BoxFit.cover,
-                    cacheWidth: 400,
-                    cacheHeight: 600,
-                    loadingBuilder: (context, child, loadingProgress) {
-                      if (loadingProgress == null) return child;
-                      return Center(
+                      progressIndicatorBuilder: (context, url, downloadProgress) => Center(
                         child: CircularProgressIndicator(
-                          value: loadingProgress.expectedTotalBytes != null
-                              ? loadingProgress.cumulativeBytesLoaded / loadingProgress.expectedTotalBytes!
-                              : null,
+                          value: downloadProgress.progress,
                         ),
-                      );
-                    },
-                    errorBuilder: (context, error, stackTrace) => const Icon(Icons.error),
+                      ),
+                      errorWidget: (context, url, error) => const Icon(Icons.error),
                     ),
                   ),
                 ),
