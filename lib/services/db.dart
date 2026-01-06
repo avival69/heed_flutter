@@ -48,7 +48,7 @@ class DatabaseService {
 
       "createdAt": FieldValue.serverTimestamp(),
       "lastActive": FieldValue.serverTimestamp(),
-    });
+    }).timeout(const Duration(seconds: 30));
   }
 
   // ============================================================
@@ -284,10 +284,16 @@ class DatabaseService {
       "createdAt": FieldValue.serverTimestamp(),
       "lastActive": FieldValue.serverTimestamp(),
       "isBanned": false,
-    });
+    }).timeout(const Duration(seconds: 30));
   }
 
+  // Get user data
+  Future<Map<String, dynamic>?> getUser(String uid) async {
+    final doc = await _db.collection('users').doc(uid).get().timeout(const Duration(seconds: 10));
+    return doc.exists ? doc.data() : null;
+  }
 
+  
 
   
 }

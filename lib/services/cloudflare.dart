@@ -23,14 +23,14 @@ class CloudflareService {
       await http.MultipartFile.fromPath("file", file.path),
     );
 
-    final response = await request.send();
-    final body = await response.stream.bytesToString();
+    final streamedResponse = await request.send().timeout(const Duration(seconds: 30));
+    final response = await http.Response.fromStream(streamedResponse);
 
     if (response.statusCode != 200) {
-      throw Exception("Upload failed: $body");
+      throw Exception("Upload failed: ${response.body}");
     }
 
-    return jsonDecode(body);
+    return jsonDecode(response.body);
   }
 
   /// Clear all cached images

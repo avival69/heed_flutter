@@ -18,6 +18,8 @@ import 'pages/create.dart';
 import 'pages/chat.dart';
 import 'pages/profile.dart';
 
+import 'services/db.dart';
+
 /// --------------------
 /// AUTH STATE NOTIFIER
 /// --------------------
@@ -38,7 +40,7 @@ final GoRouter router = GoRouter(
   initialLocation: '/',
   refreshListenable: authNotifier,
 
-  redirect: (context, state) {
+  redirect: (context, state) async {
     final user = FirebaseAuth.instance.currentUser;
     final loggedIn = user != null;
     final location = state.matchedLocation;
@@ -62,6 +64,15 @@ final GoRouter router = GoRouter(
       }
       return '/onboarding';
     }
+
+    // 🚫 If logged in and trying to access protected routes, check if onboarding completed
+    if (loggedIn && !authRoutes.contains(location)) {
+      final userData = await DatabaseService().getUser(user!.uid);
+      if (userData == null) {
+        return '/onboarding';
+      }
+    }
+
     // 🚫 Never redirect away from onboarding if on onboarding
     if (loggedIn && location == '/onboarding') {
       return null;
